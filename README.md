@@ -22,7 +22,7 @@ My Generative Pretrained Model was trained on the SEC EDGAR 1993 corpus to estab
 
 The network was optimized using the AdamW algorithm against a cross-entropy loss function. Perplexity (PPL = exp(Loss)) was used to measure predictive uncertainty.
 
-![Loss Curve](loss_curve.png)
+![Loss Curve](results/loss_curve.png)
 
 * **Final Training Loss:** 3.17
 * **Final Training Perplexity:** 23.75
