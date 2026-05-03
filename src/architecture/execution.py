@@ -4,8 +4,10 @@ import itertools
 from .tokenizer import SECRegexTokenizer
 from .dataset import EDGARDataset
 
+import tiktoken
 
-def estimate_loss(model, val_dataloader, eval_batches=50):
+
+def estimate_loss(model, val_dataloader, device, eval_batches=50):
     model.eval()
     batch_losses = []
     with torch.no_grad():
@@ -58,7 +60,7 @@ def prepare_data(train_data, val_data):
     tokenized_train = train_data.map(
         process_batch, # flatten batch of ids and insert eos_id in between
         batched=True,
-        num_proc=20, # parallelize
+        num_proc=10, # parallelize
         desc="Tokenizing Train Data"
     )
 
@@ -67,7 +69,7 @@ def prepare_data(train_data, val_data):
     tokenized_val = val_data.map(
         process_batch,
         batched=True,
-        num_proc=20,
+        num_proc=10,
         desc="Tokenizing Val Data"
     )
 
@@ -75,17 +77,56 @@ def prepare_data(train_data, val_data):
 
     return all_train_tokens, all_val_tokens, tokenizer, vocab_size
 
+def prepare_data_tiktoken(train_data, val_data):
+    # Initialize Tokenizer & Build Vocab
+    encoding = tiktoken.get_encoding("o200k_base")
+    train_texts = [feature['section_1'] for feature in train_data]
+
+    # Update Model Config
+    vocab_size = encoding.n_vocab
+
+    # Flatten and Tokenize Data (PARALLELIZED)
+    print("Tokenizing data using multiprocessing...")
+
+    def process_batch(examples):
+        batch_ids = []
+        for text in examples['section_1']:
+            ids = encoding.encode(text)
+            batch_ids.append(ids)
+        return {"flat_ids": batch_ids}
+
+    # Map across all available CPU cores
+    tokenized_train = train_data.map(
+        process_batch, # flatten batch of ids and insert eos_id in between
+        batched=True,
+        num_proc=10, # parallelize
+        desc="Tokenizing Train Data"
+    )
+
+    all_train_tokens = list(itertools.chain.from_iterable(tokenized_train["flat_ids"]))
+
+    tokenized_val = val_data.map(
+        process_batch,
+        batched=True,
+        num_proc=10,
+        desc="Tokenizing Val Data"
+    )
+
+    all_val_tokens = list(itertools.chain.from_iterable(tokenized_val["flat_ids"]))
+
+    return all_train_tokens, all_val_tokens, encoding, vocab_size
+
 
 def create_dataloaders(train_tokens, val_tokens, config, cores):
 
-    print(f"Spinning up {min(8, cores)} DataLoader workers...") # 8 or 4 is good
+    print(f"Spinning up {min(10, cores)} DataLoader workers...") # 8 or 4 is good
 
     train_dataset = EDGARDataset(train_tokens, config["context_length"])
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=config["batch_size"],
         shuffle=True,
-        num_workers=min(8, cores),     # Fetch data using background CPU cores
+        num_workers=min(10, cores),    # Fetch data using background CPU cores
         pin_memory=True                # Speeds up CPU-to-GPU transfer
     )
 
@@ -94,7 +135,7 @@ def create_dataloaders(train_tokens, val_tokens, config, cores):
         val_dataset,
         batch_size=config["batch_size"],
         shuffle=False,
-        num_workers=min(8, cores),
+        num_workers=min(10, cores),
         pin_memory=True
     )
 
@@ -127,7 +168,7 @@ def train(model, train_loader, val_loader, optimizer, config, device, eval_every
             optimizer.step() # Update parameters
 
             if step % eval_every == 0:
-                val_loss = estimate_loss(model, val_loader)
+                val_loss = estimate_loss(model, val_loader, device)
                 val_losses.append(val_loss)
                 train_loss = loss.item()
                 train_losses.append(train_loss)

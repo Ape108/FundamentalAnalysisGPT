@@ -7,13 +7,15 @@ import random # randomly seeding
 import datasets
 import matplotlib.pyplot as plt
 import torch # PyTorch tensor library
-
+import torch._dynamo
+torch._dynamo.config.suppress_errors = True
 
 from architecture.model import GPTModel 
 
 from architecture.execution import (
     generate_text,
     prepare_data,
+    prepare_data_tiktoken,
     create_dataloaders,
     train
 )
@@ -34,10 +36,10 @@ CONFIG = {
     "n_heads": 8,
     "n_layers": 4,
     "drop_rate": 0.1,
-    "qkv_bias": False,
-    "batch_size": 256,
+    "qkv_bias": True,
+    "batch_size": 12,
     "learning_rate": 5e-4,
-    "max_steps": 3000
+    "max_steps": 1000
 }
 
 print("Config:", CONFIG)
@@ -56,8 +58,9 @@ def main():
 
     ### Tokenize Dataset ###
 
-    all_train_tokens, all_val_tokens, tokenizer, vocab_size = prepare_data(year_1993_training_dataset, year_1993_test_dataset)
-
+    all_train_tokens, all_val_tokens, tokenizer, vocab_size = prepare_data_tiktoken(year_1993_training_dataset, year_1993_test_dataset)
+    # all_train_tokens, all_val_tokens, tokenizer, vocab_size = prepare_data(year_1993_training_dataset, year_1993_test_dataset)
+    
     CONFIG["vocab_size"] = vocab_size
     print(f"Updated CONFIG: {CONFIG}")
 
@@ -69,14 +72,14 @@ def main():
 
     model = GPTModel(CONFIG).to(device)
 
-    print("Compiling model for GPU Arhcitecture...")
-    model = torch.compile(model)
+    # print("Compiling model for GPU Arhcitecture...")
+    # model = torch.compile(model)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=CONFIG["learning_rate"])
 
     ### Training Loop ###
 
-    EVAL_EVERY = 100
+    EVAL_EVERY = 20
 
     train_losses, val_losses = train(
         model=model,
@@ -87,7 +90,7 @@ def main():
         device=device,
         eval_every=EVAL_EVERY,
         num_epochs=1,
-        max_steps=1500
+        max_steps=CONFIG["max_steps"]
     )
 
     print("Pipeline run complete!")
@@ -132,7 +135,7 @@ def main():
     ]
 
     for p in prompts:
-        input_ids, _ = tokenizer.encode(p)
+        input_ids = tokenizer.encode(p) # input_ids, _ = tokenizer.encode(p)
         input_tensor = torch.tensor([input_ids], dtype=torch.long).to(device)
 
         # Generate 40 tokens per prompt
