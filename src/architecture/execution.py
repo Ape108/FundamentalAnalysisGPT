@@ -2,7 +2,7 @@ import torch
 import itertools
 
 from .tokenizer import SECRegexTokenizer
-from .dataset import EDGARDataset
+from .dataset import EDGARDataset, StreamingEDGARDataset
 
 import tiktoken
 
@@ -141,6 +141,36 @@ def create_dataloaders(train_tokens, val_tokens, config, cores):
 
     return train_dataloader, val_dataloader
 
+def create_streaming_dataloaders(train_stream, val_stream, config):
+    
+    # Initialize tokenizer here instead of doing it in a separate prep step
+    encoding = tiktoken.get_encoding("gpt2")
+    vocab_size = encoding.n_vocab
+
+    # Hugging Face streams need to be shuffled using a buffer, 
+    # since we don't have the whole dataset to shuffle at once.
+    train_stream = train_stream.shuffle(buffer_size=10000, seed=42)
+
+    train_dataset = StreamingEDGARDataset(train_stream, config["context_length"], encoding)
+    
+    train_dataloader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=config["batch_size"],
+        # shuffle=True is INVALID for IterableDatasets (handled by HF buffer above)
+        num_workers=0, # Keep at 0 for streaming to avoid data duplication across threads
+        pin_memory=True                
+    )
+
+    val_dataset = StreamingEDGARDataset(val_stream, config["context_length"], encoding)
+    val_dataloader = torch.utils.data.DataLoader(
+        val_dataset,
+        batch_size=config["batch_size"],
+        num_workers=0,
+        pin_memory=True
+    )
+
+    return train_dataloader, val_dataloader, vocab_size, encoding
+
 
 def train(model, train_loader, val_loader, optimizer, config, device, eval_every=100, num_epochs=1, max_steps=1500):
 
@@ -175,6 +205,68 @@ def train(model, train_loader, val_loader, optimizer, config, device, eval_every
                 print(f"Epoch {epoch} | Step {step} | Train loss: {train_loss:.4f} | Val loss: {val_loss:.4f}")
 
             if step >= max_steps:
+                print(f"Reached max_steps ({max_steps}). Stopping training early.")
+                return train_losses, val_losses
+
+    return train_losses, val_losses
+
+import torch
+
+def train_efficient(model, train_loader, val_loader, optimizer, config, device, scheduler=None, eval_every=100, num_epochs=1, max_steps=1500, accumulation_steps=8):
+
+    # Training Loop
+    step = 0
+    actual_step = 0 # Tracks actual weight updates
+    train_losses, val_losses = [], []
+    
+    # Initialize gradients to zero before starting
+    optimizer.zero_grad() 
+
+    for epoch in range(num_epochs):
+
+        for X, y in train_loader:
+            step += 1
+
+            # tensor.to(device, non_blocking=True) starts moving stuff to the GPU in
+            # the background and goes on to the next line of code
+            X, y = X.to(device, non_blocking=True), y.to(device, non_blocking=True)
+
+            # Automatic Mixed Precision (bfloat16 works great on RTX 3000 series)
+            # casts parameters into optimized dtypes for computational efficiency
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                logits = model(X).view(-1, config["vocab_size"])
+                loss = torch.nn.functional.cross_entropy(logits, y.view(-1))
+                
+                # Scale the loss down by accumulation steps
+                loss = loss / accumulation_steps
+
+            # Back propagation (accumulates gradients, doesn't overwrite them yet)
+            loss.backward() 
+
+            # Only update weights after accumulating enough gradients
+            if step % accumulation_steps == 0:
+                # Gradient clipping to prevent exploding gradients (crucial for Transformers)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                
+                optimizer.step() # Update parameters
+                
+                if scheduler is not None:
+                    scheduler.step() # Update learning rate
+                
+                optimizer.zero_grad() # Reset Gradients for the next batch
+                actual_step += 1
+
+            # Evaluation happens based on actual weight updates, not just forward passes
+            if step % (eval_every * accumulation_steps) == 0:
+                val_loss = estimate_loss(model, val_loader, device)
+                val_losses.append(val_loss)
+                # Multiply by accumulation_steps to get the true scale of the loss for printing
+                train_loss = loss.item() * accumulation_steps 
+                train_losses.append(train_loss)
+                print(f"Epoch {epoch} | Update Step {actual_step} | Train loss: {train_loss:.4f} | Val loss: {val_loss:.4f}")
+
+            # Stop based on actual weight updates
+            if actual_step >= max_steps:
                 print(f"Reached max_steps ({max_steps}). Stopping training early.")
                 return train_losses, val_losses
 

@@ -8,65 +8,79 @@ import datasets
 import matplotlib.pyplot as plt
 import torch # PyTorch tensor library
 import torch._dynamo
-torch._dynamo.config.suppress_errors = True
+
 
 from architecture.model import GPTModel 
 
 from architecture.execution import (
+    create_streaming_dataloaders,
     generate_text,
     prepare_data,
     prepare_data_tiktoken,
     create_dataloaders,
-    train
+    train,
+    train_efficient
 )
-
-torch.set_float32_matmul_precision('high')
-
-# seeding random numbers for reproducibility
-random.seed(42)
-torch.manual_seed(42)
-
-device = "cuda" if torch.cuda.is_available() else "cpu"  # choose device
-print("Using device:", device)
-
-CONFIG = {
-    "vocab_size": 0,
-    "context_length": 256,
-    "emb_dim": 256,
-    "n_heads": 8,
-    "n_layers": 4,
-    "drop_rate": 0.1,
-    "qkv_bias": True,
-    "batch_size": 12,
-    "learning_rate": 5e-4,
-    "max_steps": 1000
-}
-
-print("Config:", CONFIG)
-
 
 def main():
 
+    ### Config & Seeding ###
+
+    torch._dynamo.config.suppress_errors = True
+    torch.set_float32_matmul_precision('high')
+
+    # seeding random numbers for reproducibility
+    random.seed(42)
+    torch.manual_seed(42)
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"  # choose device
+    print("Using device:", device)
+
+    CONFIG = {
+        "vocab_size": 0,
+        "context_length": 256,
+        "emb_dim": 384,
+        "n_heads": 8,
+        "n_layers": 6,
+        "drop_rate": 0.1,
+        "qkv_bias": True,
+        "batch_size": 16,
+        "learning_rate": 5e-4,
+        "max_steps": 1500
+    }
+
+    print("Config:", CONFIG)
+
     ### Download Dataset ###
 
-    year_1993_training_dataset, year_1993_test_dataset = datasets.load_dataset(
+    # Load the full corpus using streaming (without the 'split' argument)
+    dataset_streams = datasets.load_dataset(
         "eloukas/edgar-corpus",
-        "year_1993",
-        split=["train","test"],
-        trust_remote_code=True
+        "full",
+        trust_remote_code=True,
+        streaming=True 
     )
+
+    # Extract the individual streams from the dictionary
+    train_stream = dataset_streams["train"]
+    val_stream = dataset_streams["test"]
 
     ### Tokenize Dataset ###
 
-    all_train_tokens, all_val_tokens, tokenizer, vocab_size = prepare_data_tiktoken(year_1993_training_dataset, year_1993_test_dataset)
-    # all_train_tokens, all_val_tokens, tokenizer, vocab_size = prepare_data(year_1993_training_dataset, year_1993_test_dataset)
-    
+    # all_train_tokens, all_val_tokens, tokenizer, vocab_size = prepare_data_tiktoken(full_training_dataset, full_test_dataset)
+    # all_train_tokens, all_val_tokens, tokenizer, vocab_size = prepare_data(full_training_dataset, full_test_dataset)
+
+    train_dataloader, val_dataloader, vocab_size, tokenizer = create_streaming_dataloaders(
+        train_stream, val_stream, CONFIG
+    )    
+
+
     CONFIG["vocab_size"] = vocab_size
     print(f"Updated CONFIG: {CONFIG}")
 
     ### Initialize Dataloaders ###
 
-    train_dataloader, val_dataloader = create_dataloaders(all_train_tokens, all_val_tokens, CONFIG, cores=8)
+    # train_dataloader, val_dataloader = create_dataloaders(all_train_tokens, all_val_tokens, CONFIG, cores=8)
 
     ### Initialize Model & Optimzer ###
 
@@ -81,13 +95,14 @@ def main():
 
     EVAL_EVERY = 20
 
-    train_losses, val_losses = train(
+    train_losses, val_losses = train_efficient(
         model=model,
         train_loader=train_dataloader,
         val_loader=val_dataloader,
         optimizer=optimizer,
         config=CONFIG,
         device=device,
+        accumulation_steps=8,
         eval_every=EVAL_EVERY,
         num_epochs=1,
         max_steps=CONFIG["max_steps"]
