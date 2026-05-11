@@ -1,9 +1,6 @@
 import torch
 import tiktoken
-from architecture.model import GPTModel
-from architecture.execution import generate_text
-# Import whatever function you used to get your tokenizer
-# from architecture.execution import get_tokenizer 
+from model.architecture import GPTModel, generate_text
 
 def main():
     # 1. Set up device

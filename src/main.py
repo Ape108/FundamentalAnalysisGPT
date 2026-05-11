@@ -9,10 +9,8 @@ import matplotlib.pyplot as plt
 import torch # PyTorch tensor library
 import torch._dynamo
 
-
-from architecture.model import GPTModel 
-
-from architecture.execution import (
+from model.architecture import (
+    GPTModel,
     create_streaming_dataloaders,
     generate_text,
     prepare_data,
