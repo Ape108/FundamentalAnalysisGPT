@@ -28,8 +28,8 @@ pip install -q "numpy<2" "datasets<3" tiktoken matplotlib
 
 ## Directory Structure
 
-* `code/Milestone_3.ipynb`: The main executable Jupyter Notebook containing the full pipeline.
-* `code/architecture.py`: The consolidated Python module containing the custom Tokenizer, Dataset streaming classes, Transformer model, and optimized training loops.
+* `Milestone_3.ipynb`: The main executable Jupyter Notebook containing the full pipeline.
+* `architecture.py`: The consolidated Python module containing the custom Tokenizer, Dataset streaming classes, Transformer model, and optimized training loops.
 * `results/`: Contains the generated loss curve plots and textual outputs.
 * `lora_adapted_model.pth` / `milestone_2_model.pth`: The saved model weights (generated during runtime).
 
