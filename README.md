@@ -31,7 +31,7 @@ pip install -q "numpy<2" "datasets<3" tiktoken matplotlib
 * `Milestone_3.ipynb`: The main executable Jupyter Notebook containing the full pipeline.
 * `architecture.py`: The consolidated Python module containing the custom Tokenizer, Dataset streaming classes, Transformer model, and optimized training loops.
 * `results/`: Contains the generated loss curve plots and textual outputs.
-* `lora_adapted_model.pth` / `milestone_2_model.pth`: The saved model weights (generated during runtime).
+* `lora_adapted_model.pth` / `milestone_3_model.pth`: The saved model weights (generated during runtime).
 
 ## Exact Commands to Run Training and Evaluation
 
@@ -57,7 +57,7 @@ All reported metrics and visualizations are generated automatically by the noteb
 
 ## Where Outputs are Saved
 
-* Model weights are saved to the root directory as `milestone_2_model.pth` and `lora_adapted_model.pth`.
+* Model weights are saved to the root directory as `milestone_3_model.pth` and `lora_adapted_model.pth`.
 * Plots are saved to the root directory as `loss_curve.png` (and should be moved to the `results/` folder for submission review).
 
 ## How to Reproduce the Demo (Qualitative Evaluation)
