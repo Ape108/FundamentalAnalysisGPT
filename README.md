@@ -15,34 +15,27 @@ FundamentalAnalysisGPT is a custom-built, Pre-LayerNorm Generative Pretrained Tr
 
 ## Environment & Setup Instructions
 
-The project is designed to be run in a Google Colab environment (A100 runtime).
+The project is designed to be run in a Google Colab environment (A100 runtime). Colab pre-installs most requirements (like PyTorch and CUDA bindings), but you must strictly downgrade NumPy to avoid C++ ABI conflicts with the HuggingFace datasets library.
 
-**Critical File Placement:**
-Before running the notebook, you **must** upload the `architecture.py` file directly into the root file directory of your Google Colab instance. The Jupyter Notebook relies on this file being in the same root environment to properly import the custom tokenizer, model architecture, and training loops.
-
-**Dependency Installation:**
-Colab pre-installs most requirements (like PyTorch and CUDA bindings), but you must strictly downgrade NumPy to avoid C++ ABI conflicts with the HuggingFace datasets library. Run the following command in your environment before executing the code:
+Run the following command in your environment before executing the code:
 
 ```bash
 pip install -q "numpy<2" "datasets<3" tiktoken matplotlib
 
 ```
 
-*(If running locally, ensure you have PyTorch 2.0+ installed with CUDA 12.1+ support).*
+*If running locally, ensure you have PyTorch 2.0+ installed with CUDA 12.1+ support.*
 
 ## Directory Structure
 
-All files for this submission are located in the root directory:
-
 * `Milestone_3.ipynb`: The main executable Jupyter Notebook containing the full pipeline.
 * `architecture.py`: The consolidated Python module containing the custom Tokenizer, Dataset streaming classes, Transformer model, and optimized training loops.
-* `Milestone_3_Report.pdf`: The final report detailing methodology, metrics, and error analysis.
-* `loss_curve.png`: The generated plot of the pretraining loss.
-* `milestone_2_model.pth` / `lora_adapted_model.pth`: The saved model weights (generated during runtime).
+* `results/`: Contains the generated loss curve plots and textual outputs.
+* `lora_adapted_model.pth` / `milestone_2_model.pth`: The saved model weights (generated during runtime).
 
 ## Exact Commands to Run Training and Evaluation
 
-To reproduce the workflow, open `Milestone_3.ipynb` in Google Colab (with an A100 GPU attached), ensure `architecture.py` is uploaded to the same directory, and execute the cells sequentially.
+To reproduce the workflow, open `code/Milestone_3.ipynb` in Google Colab (with an A100 GPU attached) and execute the cells sequentially.
 
 **To Run Pretraining (Base Model):**
 
@@ -59,12 +52,13 @@ To reproduce the workflow, open `Milestone_3.ipynb` in Google Colab (with an A10
 
 All reported metrics and visualizations are generated automatically by the notebook:
 
-* **Loss Curves:** Upon completing the pretraining loop, the notebook uses `matplotlib` to plot the Training vs. Validation loss and saves it directly to the root directory as `loss_curve.png`.
+* **Loss Curves:** Upon completing the pretraining loop, the notebook uses `matplotlib` to plot the Training vs. Validation loss and saves it directly to the working directory as `loss_curve.png`.
 * **Perplexity & Loss Tables:** The final Training Loss, Validation Loss, and calculated Perplexity are printed to the standard output console immediately following the training loops.
 
 ## Where Outputs are Saved
 
-* All generated plots and model weights are saved directly to the root directory alongside the notebook.
+* Model weights are saved to the root directory as `milestone_2_model.pth` and `lora_adapted_model.pth`.
+* Plots are saved to the root directory as `loss_curve.png` (and should be moved to the `results/` folder for submission review).
 
 ## How to Reproduce the Demo (Qualitative Evaluation)
 
